@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comunicación Entre Procesos — Sistemas Distribuidos</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;600;800&display=swap');
+
+  :root {
+    --bg: #050d1a;
+    --panel: #0a1628;
+    --border: #0d3460;
+    --cyan: #00f5ff;
+    --green: #00ff88;
+    --orange: #ff6b35;
+    --pink: #ff2d6d;
+    --yellow: #ffd700;
+    --text: #c8d8e8;
+    --dim: #4a6080;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ── FONDO ANIMADO ── */
+  .bg-grid {
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(0,245,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridMove 20s linear infinite;
+  }
+  @keyframes gridMove { from { background-position: 0 0; } to { background-position: 40px 40px; } }
+
+  .scanline {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
+    );
+  }
+
+  /* ── LAYOUT ── */
+  .wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 20px 60px; }
+
+  /* ── HEADER ── */
+  header {
+    text-align: center;
+    padding: 50px 20px 30px;
+    position: relative;
+  }
+  .badge {
+    display: inline-block;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--cyan);
+    border: 1px solid var(--cyan);
+    padding: 4px 14px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  h1 {
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 800;
+    font-size: clamp(26px, 5vw, 52px);
+    line-height: 1.1;
+    background: linear-gradient(135deg, var(--cyan), var(--green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 10px;
+  }
+  .subtitle {
+    font-size: 15px;
+    color: var(--dim);
+    font-weight: 300;
+    letter-spacing: 1px;
+  }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center;
+    margin: 30px 0 20px;
+  }
+  .tab {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 8px 20px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--dim);
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.25s;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .tab:hover { border-color: var(--cyan); color: var(--cyan); }
+  .tab.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,245,255,0.08); }
+
+  /* ── SECCIONES ── */
+  .section { display: none; }
+  .section.active { display: block; animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ── CARDS INFO ── */
+  .info-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--cyan);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    border-radius: 2px;
+  }
+  .info-card h3 { color: var(--cyan); font-size: 15px; margin-bottom: 8px; font-weight: 600; letter-spacing: 1px; }
+  .info-card p { font-size: 14px; line-height: 1.7; color: var(--text); font-weight: 300; }
+
+  /* ── CANVAS IPC ── */
+  .canvas-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .canvas-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: var(--cyan);
+    letter-spacing: 2px;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  canvas { display: block; width: 100%; border-radius: 2px; }
+
+  /* ── CONTROLES ── */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    justify-content: center; margin: 14px 0;
+  }
+  .btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 9px 22px;
+    border: 1px solid;
+    background: transparent;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    border-radius: 2px;
+  }
+  .btn-cyan  { border-color: var(--cyan);  color: var(--cyan);  }
+  .btn-green { border-color: var(--green); color: var(--green); }
+  .btn-orange{ border-color: var(--orange);color: var(--orange);}
+  .btn-pink  { border-color: var(--pink);  color: var(--pink);  }
+  .btn:hover { filter: brightness(1.3); transform: scale(1.03); }
+  .btn:active{ transform: scale(0.97); }
+
+  /* ── LOG TERMINAL ── */
+  .log {
+    background: #020810;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 14px;
+    height: 120px;
+    overflow-y: auto;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .log-entry { display: flex; gap: 8px; }
+  .log-time { color: var(--dim); flex-shrink: 0; }
+  .log-msg-send { color: var(--cyan); }
+  .log-msg-recv { color: var(--green); }
+  .log-msg-err  { color: var(--pink); }
+  .log-msg-info { color: var(--yellow); }
+
+  /* ── TIPOS GRID ── */
+  .tipos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .tipo-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .tipo-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    transition: opacity 0.3s;
+    opacity: 0.6;
+  }
+  .tipo-card.c1::before { background: var(--cyan); }
+  .tipo-card.c2::before { background: var(--green); }
+  .tipo-card.c3::before { background: var(--orange); }
+  .tipo-card.c4::before { background: var(--pink); }
+  .tipo-card.c5::before { background: var(--yellow); }
+  .tipo-card.c6::before { background: linear-gradient(90deg, var(--cyan), var(--pink)); }
+  .tipo-card:hover { border-color: rgba(0,245,255,0.4); transform: translateY(-3px); }
+  .tipo-card:hover::before { opacity: 1; }
+  .tipo-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .tipo-card.c1 h4 { color: var(--cyan); }
+  .tipo-card.c2 h4 { color: var(--green); }
+  .tipo-card.c3 h4 { color: var(--orange); }
+  .tipo-card.c4 h4 { color: var(--pink); }
+  .tipo-card.c5 h4 { color: var(--yellow); }
+  .tipo-card.c6 h4 { color: var(--cyan); }
+  .tipo-card p  { font-size: 12.5px; line-height: 1.6; color: var(--text); font-weight: 300; }
+  .tipo-icon { font-size: 24px; margin-bottom: 10px; }
+
+  /* ── DEMO SINCRÓNICO/ASINCRÓNICO ── */
+  .demo-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media(max-width:600px){ .demo-row{ grid-template-columns:1fr; } }
+  .demo-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px;
+  }
+  .demo-box h4 { font-size: 13px; letter-spacing: 1px; margin-bottom: 12px; font-family: 'Share Tech Mono', monospace; }
+  .demo-box h4.syn { color: var(--cyan); }
+  .demo-box h4.asyn { color: var(--orange); }
+
+  .timeline {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .tl-row {
+    display: flex; align-items: center; gap: 8px; font-size: 12px;
+  }
+  .tl-label { width: 55px; font-family: 'Share Tech Mono', monospace; font-size: 11px; flex-shrink: 0; }
+  .tl-bar {
+    height: 22px; border-radius: 2px; display: flex; align-items: center;
+    padding: 0 8px; font-size: 11px; font-family: 'Share Tech Mono', monospace;
+    white-space: nowrap; overflow: hidden;
+    animation: none;
+  }
+  .bar-send  { background: rgba(0,245,255,0.15); border:1px solid rgba(0,245,255,0.4); color:var(--cyan); }
+  .bar-wait  { background: rgba(255,109,53,0.10); border:1px solid rgba(255,109,53,0.3); color:var(--orange); }
+  .bar-proc  { background: rgba(0,255,136,0.12); border:1px solid rgba(0,255,136,0.3); color:var(--green); }
+  .bar-recv  { background: rgba(255,45,109,0.12); border:1px solid rgba(255,45,109,0.3); color:var(--pink); }
+  .bar-free  { background: rgba(100,100,100,0.1); border:1px dashed #333; color:var(--dim); }
+
+  /* ── CLOUD MIDDLEWARE ── */
+  .cloud-diagram {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  /* ── COMPARISON TABLE ── */
+  .comp-table { width:100%; border-collapse: collapse; font-size: 13px; margin-bottom: 24px; }
+  .comp-table th {
+    background: rgba(0,245,255,0.08);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .comp-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid rgba(13,52,96,0.5);
+    color: var(--text);
+    font-weight: 300;
+  }
+  .comp-table tr:hover td { background: rgba(0,245,255,0.03); }
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 2px;
+    font-family: 'Share Tech Mono', monospace; font-size: 10px;
+  }
+  .tag-s { background: rgba(0,245,255,0.12); color: var(--cyan); }
+  .tag-a { background: rgba(255,109,53,0.12); color: var(--orange); }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    padding: 30px 20px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    border-top: 1px solid var(--border);
+    letter-spacing: 1px;
+  }
+  footer span { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanline"></div>
+
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="badge">◉ SISTEMAS DISTRIBUIDOS — FOLIO 5</div>
+    <h1>Comunicación Entre Procesos</h1>
+    <p class="subtitle">IPC · Inter-Process Communication · Animación Interactiva</p>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="showSection('intro')">[ INTRO ]</button>
+    <button class="tab" onclick="showSection('animacion')">[ ANIMACIÓN ]</button>
+    <button class="tab" onclick="showSection('tipos')">[ TIPOS ]</button>
+    <button class="tab" onclick="showSection('sincron')">[ SÍNC vs ASÍNC ]</button>
+    <button class="tab" onclick="showSection('tabla')">[ COMPARATIVA ]</button>
+    <button class="tab" onclick="showSection('cloud')">[ CLOUD ]</button>
+  </div>
+
+  <!-- ══════════════ SECCIÓN: INTRO ══════════════ -->
+  <div class="section active" id="s-intro">
+    <div class="info-card">
+      <h3>▸ ¿Qué es la Comunicación entre Procesos (IPC)?</h3>
+      <p>La Comunicación entre Procesos (IPC — Inter-Process Communication) es el conjunto de mecanismos que permite a procesos que se ejecutan en distintas máquinas o en la misma máquina intercambiar datos y coordinarse. En sistemas distribuidos, donde múltiples procesos corren en nodos separados conectados por una red, la IPC es la columna vertebral que hace posible la colaboración entre componentes.</p>
+    </div>
+    <div class="info-card" style="border-left-color:var(--green)">
+      <h3 style="color:var(--green)">▸ Middleware como puente</h3>
+      <p>Según Sosa (2017), el Middleware es un software de conectividad que consiste en un conjunto de servicios que permiten interactuar a múltiples procesos que se ejecutan en distintas máquinas a través de una red. Oculta la heterogeneidad, abstrae la complejidad subyacente y provee un modelo de programación conveniente. La IPC es el mecanismo interno que el middleware expone al desarrollador.</p>
+    </div>
+    <div class="tipos-grid">
+      <div class="tipo-card c1" onclick="showSection('animacion'); setActiveTab(1)">
+        <div class="tipo-icon">📡</div>
+        <h4>Paso de Mensajes</h4>
+        <p>Los procesos se comunican enviando y recibiendo mensajes explícitos a través de canales o sockets.</p>
+      </div>
+      <div class="tipo-card c2" onclick="showSection('tipos'); setActiveTab(2)">
+        <div class="tipo-icon">🔄</div>
+        <p><h4>RPC / RMI</h4>Llamada a Procedimiento Remoto: un proceso invoca funciones en otro nodo como si fueran locales.</p>
+      </div>
+      <div class="tipo-card c3" onclick="showSection('tipos'); setActiveTab(2)">
+        <div class="tipo-icon">📬</div>
+        <h4>Colas de Mensajes</h4>
+        <p>Buffer asíncrono donde el emisor deposita mensajes y el receptor los consume cuando está listo.</p>
+      </div>
+      <div class="tipo-card c4" onclick="showSection('tipos'); setActiveTab(2)">
+        <div class="tipo-icon">🌐</div>
+        <h4>Servicios Web</h4>
+        <p>Comunicación vía HTTP usando SOAP, REST o GraphQL para integrar aplicaciones distribuidas.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SECCIÓN: ANIMACIÓN ══════════════ -->
+  <div class="section" id="s-animacion">
+    <div class="info-card">
+      <h3>▸ Demostración: Paso de Mensajes entre Procesos</h3>
+      <p>Esta animación muestra cómo dos procesos (P1 y P2) en nodos distintos se comunican mediante paso de mensajes a través de una red. Haz clic en los botones para enviar distintos tipos de mensajes y observa el flujo en tiempo real.</p>
+    </div>
+
+    <div class="canvas-wrap">
+      <div class="canvas-title">// SIMULACIÓN DE RED DISTRIBUIDA — PASO DE MENSAJES</div>
+      <canvas id="ipcCanvas" height="300"></canvas>
+      <div class="controls">
+        <button class="btn btn-cyan"   onclick="sendMsg('data')">  ENVIAR DATOS   </button>
+        <button class="btn btn-green"  onclick="sendMsg('ack')">   ACK / RESPUESTA </button>
+        <button class="btn btn-orange" onclick="sendMsg('sync')">  SINCRONIZAR    </button>
+        <button class="btn btn-pink"   onclick="sendMsg('error')"> SIMULAR ERROR  </button>
+      </div>
+      <div class="canvas-title" style="margin-top:14px;">// LOG DE COMUNICACIÓN</div>
+      <div class="log" id="msgLog"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SECCIÓN: TIPOS ══════════════ -->
+  <div class="section" id="s-tipos">
+    <div class="info-card">
+      <h3>▸ Tipos de Comunicación en Sistemas Distribuidos</h3>
+      <p>Los sistemas distribuidos implementan distintos patrones de comunicación según las necesidades de acoplamiento, latencia, confiabilidad y escalabilidad requeridas por la aplicación.</p>
+    </div>
+    <div class="tipos-grid">
+      <div class="tipo-card c1">
+        <div class="tipo-icon">📨</div>
+        <h4>Paso de Mensajes (Message Passing)</h4>
+        <p>Mecanismo básico donde los procesos intercambian datos encapsulados en mensajes. Pueden ser síncronos (bloqueantes) o asíncronos (no bloqueantes). Ejemplos: sockets TCP/UDP, MPI.</p>
+      </div>
+      <div class="tipo-card c2">
+        <div class="tipo-icon">☎️</div>
+        <h4>RPC — Llamada a Procedimiento Remoto</h4>
+        <p>Permite a un proceso invocar una función en otro nodo como si fuera local. El stub cliente serializa los parámetros (marshalling), los envía, y el stub servidor los deserializa y ejecuta.</p>
+      </div>
+      <div class="tipo-card c3">
+        <div class="tipo-icon">📬</div>
+        <h4>Colas de Mensajes (Message Queues)</h4>
+        <p>Canal asíncrono con buffer persistente. El emisor publica mensajes sin esperar al receptor. Alta tolerancia a fallos. Ejemplos: RabbitMQ, Apache Kafka, AWS SQS.</p>
+      </div>
+      <div class="tipo-card c4">
+        <div class="tipo-icon">📡</div>
+        <h4>Publicar/Suscribir (Pub-Sub)</h4>
+        <p>Los emisores (publishers) publican eventos en tópicos. Los suscriptores (subscribers) reciben solo los eventos de los tópicos que les interesan. Bajo acoplamiento entre componentes.</p>
+      </div>
+      <div class="tipo-card c5">
+        <div class="tipo-icon">🌐</div>
+        <h4>Servicios Web (REST / SOAP)</h4>
+        <p>Comunicación basada en HTTP. REST usa JSON/XML sobre URLs. SOAP usa un protocolo estándar XML. Son la base de las APIs modernas y la integración de microservicios en la nube.</p>
+      </div>
+      <div class="tipo-card c6">
+        <div class="tipo-icon">🔗</div>
+        <h4>Streams y Eventos</h4>
+        <p>Comunicación continua mediante flujos de datos en tiempo real. Los procesos reaccionan a eventos conforme ocurren. Ejemplos: WebSockets, gRPC streaming, Apache Flink.</p>
+      </div>
+    </div>
+
+    <!-- Diagrama Pub-Sub animado -->
+    <div class="canvas-wrap">
+      <div class="canvas-title">// DIAGRAMA: ARQUITECTURA PUB-SUB</div>
+      <canvas id="pubsubCanvas" height="260"></canvas>
+    </div>
+  </div>
+
+  <!-- ══════════════ SECCIÓN: SÍNC vs ASÍNC ══════════════ -->
+  <div class="section" id="s-sincron">
+    <div class="info-card">
+      <h3>▸ Comunicación Síncrona vs. Asíncrona</h3>
+      <p>Esta es la distinción más importante en el diseño de sistemas distribuidos. La comunicación síncrona bloquea al emisor hasta recibir respuesta. La asíncrona permite al emisor continuar trabajando mientras el mensaje se procesa en segundo plano.</p>
+    </div>
+
+    <div class="demo-row">
+      <!-- SÍNCRONA -->
+      <div class="demo-box">
+        <h4 class="syn">◉ COMUNICACIÓN SÍNCRONA (Bloqueante)</h4>
+        <div class="timeline" id="tl-syn">
+          <div class="tl-row">
+            <span class="tl-label" style="color:var(--cyan)">P1</span>
+            <div class="tl-bar bar-send" style="width:60px" id="syn-p1-send">SEND ▶</div>
+            <div class="tl-bar bar-wait" style="width:80px" id="syn-p1-wait">ESPERA ⏸</div>
+            <div class="tl-bar bar-recv" style="width:50px" id="syn-p1-resp">RESP ✓</div>
+          </div>
+          <div class="tl-row" style="margin:4px 0">
+            <span class="tl-label" style="color:var(--dim);font-size:10px">RED</span>
+            <div style="flex:1;height:1px;background:linear-gradient(90deg,var(--cyan),var(--border));margin:0 4px;position:relative;">
+              <span id="syn-pkt" style="position:absolute;top:-8px;left:0;font-size:14px;transition:left 0.5s">📦</span>
+            </div>
+          </div>
+          <div class="tl-row">
+            <span class="tl-label" style="color:var(--green)">P2</span>
+            <div class="tl-bar bar-free"  style="width:60px">LIBRE</div>
+            <div class="tl-bar bar-proc" style="width:80px" id="syn-p2-proc">PROC ⚙</div>
+            <div class="tl-bar bar-send" style="width:50px" id="syn-p2-send">SEND ▶</div>
+          </div>
+          <div style="margin-top:12px;font-size:11px;color:var(--dim);font-family:'Share Tech Mono',monospace">
+            ⚠ P1 queda bloqueado hasta que P2 responda
+          </div>
+        </div>
+        <div class="controls" style="margin-top:12px">
+          <button class="btn btn-cyan" onclick="animateSyn()">▶ SIMULAR</button>
+        </div>
+      </div>
+
+      <!-- ASÍNCRONA -->
+      <div class="demo-box">
+        <h4 class="asyn">◉ COMUNICACIÓN ASÍNCRONA (No Bloqueante)</h4>
+        <div class="timeline" id="tl-asyn">
+          <div class="tl-row">
+            <span class="tl-label" style="color:var(--orange)">P1</span>
+            <div class="tl-bar bar-send"  style="width:50px" id="asyn-p1-send">SEND</div>
+            <div class="tl-bar bar-proc" style="width:90px" id="asyn-p1-cont">CONT. TRABAJO ▶</div>
+            <div class="tl-bar bar-recv" style="width:40px" id="asyn-p1-cb">CB ✓</div>
+          </div>
+          <div class="tl-row" style="margin:4px 0">
+            <span class="tl-label" style="color:var(--dim);font-size:10px">COLA</span>
+            <div style="flex:1;height:1px;background:linear-gradient(90deg,var(--orange),var(--border));margin:0 4px;position:relative;">
+              <span id="asyn-pkt" style="position:absolute;top:-8px;left:0;font-size:14px;transition:left 1s">📬</span>
+            </div>
+          </div>
+          <div class="tl-row">
+            <span class="tl-label" style="color:var(--green)">P2</span>
+            <div class="tl-bar bar-free"  style="width:50px">LIBRE</div>
+            <div class="tl-bar bar-free"  style="width:30px">...</div>
+            <div class="tl-bar bar-proc" style="width:60px" id="asyn-p2-proc">PROC ⚙</div>
+            <div class="tl-bar bar-send" style="width:40px" id="asyn-p2-send">RESP</div>
+          </div>
+          <div style="margin-top:12px;font-size:11px;color:var(--dim);font-family:'Share Tech Mono',monospace">
+            ✓ P1 sigue ejecutando mientras P2 procesa
+          </div>
+        </div>
+        <div class="controls" style="margin-top:12px">
+          <button class="btn btn-orange" onclick="animateAsyn()">▶ SIMULAR</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <div class="canvas-title">// VISUALIZACIÓN COMPARATIVA EN TIEMPO REAL</div>
+      <canvas id="compCanvas" height="200"></canvas>
+      <div class="controls">
+        <button class="btn btn-cyan" onclick="startCompDemo()">▶ INICIAR DEMO</button>
+        <button class="btn btn-pink" onclick="resetCompDemo()">↺ REINICIAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SECCIÓN: TABLA ══════════════ -->
+  <div class="section" id="s-tabla">
+    <div class="info-card">
+      <h3>▸ Comparativa de Mecanismos de Comunicación</h3>
+      <p>Cada mecanismo de IPC tiene sus propias características de acoplamiento, latencia y casos de uso ideales. Esta tabla resume los más importantes en sistemas distribuidos modernos.</p>
+    </div>
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th>MECANISMO</th>
+          <th>TIPO</th>
+          <th>ACOPLAMIENTO</th>
+          <th>LATENCIA</th>
+          <th>FIABILIDAD</th>
+          <th>CASO DE USO</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Sockets TCP/UDP</td>
+          <td><span class="tag tag-s">SÍNC / ASÍNC</span></td>
+          <td>Alto</td>
+          <td>Muy baja</td>
+          <td>TCP: Alta / UDP: Baja</td>
+          <td>Comunicación en tiempo real, videojuegos</td>
+        </tr>
+        <tr>
+          <td>RPC / gRPC</td>
+          <td><span class="tag tag-s">SÍNCRONO</span></td>
+          <td>Alto</td>
+          <td>Baja</td>
+          <td>Alta</td>
+          <td>Microservicios, APIs internas</td>
+        </tr>
+        <tr>
+          <td>REST API</td>
+          <td><span class="tag tag-s">SÍNCRONO</span></td>
+          <td>Bajo</td>
+          <td>Media</td>
+          <td>Alta</td>
+          <td>Integración web, APIs públicas</td>
+        </tr>
+        <tr>
+          <td>SOAP</td>
+          <td><span class="tag tag-s">SÍNCRONO</span></td>
+          <td>Alto</td>
+          <td>Media-alta</td>
+          <td>Muy alta</td>
+          <td>Servicios empresariales, banca</td>
+        </tr>
+        <tr>
+          <td>Message Queue (Kafka)</td>
+          <td><span class="tag tag-a">ASÍNCRONO</span></td>
+          <td>Muy bajo</td>
+          <td>Baja-media</td>
+          <td>Muy alta</td>
+          <td>Event streaming, logs, big data</td>
+        </tr>
+        <tr>
+          <td>Pub-Sub</td>
+          <td><span class="tag tag-a">ASÍNCRONO</span></td>
+          <td>Muy bajo</td>
+          <td>Baja</td>
+          <td>Alta</td>
+          <td>Notificaciones, IoT, microservicios</td>
+        </tr>
+        <tr>
+          <td>WebSockets</td>
+          <td><span class="tag tag-a">ASÍNCRONO</span></td>
+          <td>Medio</td>
+          <td>Muy baja</td>
+          <td>Alta</td>
+          <td>Chat, dashboards en vivo</td>
+        </tr>
+        <tr>
+          <td>Shared Memory</td>
+          <td><span class="tag tag-s">SÍNCRONO</span></td>
+          <td>Muy alto</td>
+          <td>Mínima</td>
+          <td>Media</td>
+          <td>Procesos en mismo nodo</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══════════════ SECCIÓN: CLOUD ══════════════ -->
+  <div class="section" id="s-cloud">
+    <div class="info-card">
+      <h3>▸ Cloud Computing y la Web como Middleware</h3>
+      <p>El Cloud Computing es el modelo que ofrece recursos de cómputo, almacenamiento y redes como servicios bajo demanda a través de Internet. La web actúa como middleware universal, permitiendo que procesos en cualquier parte del mundo se comuniquen usando protocolos estándar (HTTP, WebSocket, MQTT).</p>
+    </div>
+    <div class="tipos-grid">
+      <div class="tipo-card c1">
+        <div class="tipo-icon">☁️</div>
+        <h4>IaaS — Infraestructura como Servicio</h4>
+        <p>Se alquilan máquinas virtuales, redes y almacenamiento. El usuario gestiona SO y aplicaciones. Ej: AWS EC2, Azure VMs, Google Compute Engine.</p>
+      </div>
+      <div class="tipo-card c2">
+        <div class="tipo-icon">🏗️</div>
+        <h4>PaaS — Plataforma como Servicio</h4>
+        <p>Se provee el entorno de ejecución completo. El desarrollador solo despliega código. Ej: Heroku, Google App Engine, AWS Elastic Beanstalk.</p>
+      </div>
+      <div class="tipo-card c3">
+        <div class="tipo-icon">📦</div>
+        <h4>SaaS — Software como Servicio</h4>
+        <p>Aplicaciones completas accesibles desde el navegador. El proveedor gestiona todo. Ej: Gmail, Salesforce, Microsoft 365, Zoom.</p>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <div class="canvas-title">// ARQUITECTURA CLOUD: WEB COMO MIDDLEWARE</div>
+      <canvas id="cloudCanvas" height="280"></canvas>
+    </div>
+    <div class="info-card" style="border-left-color:var(--orange)">
+      <h3 style="color:var(--orange)">▸ La Web como Middleware Universal</h3>
+      <p>La IETF definió middleware como un conjunto de servicios y funciones reutilizables, expandibles, utilizadas por muchas aplicaciones para funcionar dentro de un ambiente interconectado. La Web cumple exactamente ese rol: HTTP es el protocolo universal de comunicación entre procesos distribuidos en la nube. Los servicios REST, SOAP, GraphQL y gRPC son las interfaces que exponen los procesos para comunicarse sobre esta infraestructura.</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <span>SISTEMAS DISTRIBUIDOS</span> · Folio 5 · Comunicación Entre Procesos ·
+  Universidad Politécnica Estatal del Carchi · <span>2026</span>
+</footer>
+
+<!-- ══════════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════════ -->
+<script>
+// ── Tab navigation ──────────────────────────────────────
+const sections = ['intro','animacion','tipos','sincron','tabla','cloud'];
+function showSection(id) {
+  sections.forEach(s => {
+    document.getElementById('s-'+s).classList.remove('active');
+  });
+  document.getElementById('s-'+id).classList.add('active');
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.remove('active'));
+  const idx = sections.indexOf(id);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+  // Trigger canvas draws
+  if(id==='animacion') initIPC();
+  if(id==='tipos') initPubSub();
+  if(id==='sincron') initComp();
+  if(id==='cloud') initCloud();
+}
+function setActiveTab(i) {
+  document.querySelectorAll('.tab').forEach((t,j) => t.classList.toggle('active', i===j));
+}
+document.querySelectorAll('.tab').forEach((t,i) => {
+  t.addEventListener('click', () => { /* handled inline */ });
+});
+
+// ── LOG ──────────────────────────────────────────────────
+let logEl;
+function initLog() { logEl = document.getElementById('msgLog'); }
+function addLog(msg, type='info') {
+  if(!logEl) logEl = document.getElementById('msgLog');
+  const now = new Date();
+  const t = now.toTimeString().slice(0,8);
+  const d = document.createElement('div');
+  d.className = 'log-entry';
+  d.innerHTML = `<span class="log-time">[${t}]</span><span class="log-msg-${type}">${msg}</span>`;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ── CANVAS IPC: Paso de Mensajes ────────────────────────
+let ipcCanvas, ipcCtx, ipcAnim, packets = [];
+let ipcInited = false;
+
+function initIPC() {
+  if(ipcInited) return;
+  ipcInited = true;
+  ipcCanvas = document.getElementById('ipcCanvas');
+  ipcCtx = ipcCanvas.getContext('2d');
+  ipcCanvas.width = ipcCanvas.offsetWidth;
+  ipcCanvas.height = 300;
+  initLog();
+  addLog('Sistema IPC inicializado. Listo para enviar mensajes.', 'info');
+  renderIPC();
+}
+
+function drawNode(ctx, x, y, label, sublabel, color) {
+  // Glow
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 20;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x-50, y-35, 100, 70);
+  ctx.shadowBlur = 0;
+  // Fill
+  ctx.fillStyle = 'rgba(10,22,40,0.95)';
+  ctx.fillRect(x-49, y-34, 98, 68);
+  // Label
+  ctx.fillStyle = color;
+  ctx.font = 'bold 14px "Exo 2", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, x, y);
+  ctx.fillStyle = '#4a6080';
+  ctx.font = '11px "Share Tech Mono", monospace';
+  ctx.fillText(sublabel, x, y+18);
+}
+
+function renderIPC() {
+  if(!ipcCtx) return;
+  const W = ipcCanvas.width, H = ipcCanvas.height;
+  ipcCtx.clearRect(0,0,W,H);
+
+  // Background
+  ipcCtx.fillStyle = '#020810';
+  ipcCtx.fillRect(0,0,W,H);
+
+  const cx = W/2, cy = H/2;
+  const p1x = 90, p2x = W-90;
+
+  // Network line (dashed)
+  ipcCtx.setLineDash([6,4]);
+  ipcCtx.strokeStyle = '#0d3460';
+  ipcCtx.lineWidth = 1;
+  ipcCtx.beginPath();
+  ipcCtx.moveTo(p1x+50, cy);
+  ipcCtx.lineTo(p2x-50, cy);
+  ipcCtx.stroke();
+  ipcCtx.setLineDash([]);
+
+  // Network label
+  ipcCtx.fillStyle = '#1a3550';
+  ipcCtx.font = '10px "Share Tech Mono", monospace';
+  ipcCtx.textAlign = 'center';
+  ipcCtx.fillText('RED / MIDDLEWARE', cx, cy-10);
+
+  // Router icon
+  ipcCtx.fillStyle = '#0d3460';
+  ipcCtx.beginPath();
+  ipcCtx.arc(cx, cy+2, 18, 0, Math.PI*2);
+  ipcCtx.fill();
+  ipcCtx.strokeStyle = '#1c5490';
+  ipcCtx.lineWidth = 1;
+  ipcCtx.stroke();
+  ipcCtx.fillStyle = '#2e75b6';
+  ipcCtx.font = '16px sans-serif';
+  ipcCtx.textAlign = 'center';
+  ipcCtx.fillText('⚡', cx, cy+7);
+
+  // Nodes
+  drawNode(ipcCtx, p1x, cy, 'PROCESO 1', 'Nodo A · 192.168.1.1', '#00f5ff');
+  drawNode(ipcCtx, p2x, cy, 'PROCESO 2', 'Nodo B · 192.168.1.2', '#00ff88');
+
+  // Packets
+  packets.forEach(pk => {
+    ipcCtx.save();
+    ipcCtx.globalAlpha = pk.alpha;
+    ipcCtx.shadowColor = pk.color;
+    ipcCtx.shadowBlur = 12;
+    ipcCtx.fillStyle = pk.color;
+    const px = p1x + 50 + (p2x - p1x - 100) * pk.progress * (pk.dir===1?1:-1) * (pk.dir===-1 ? 0 : 1)
+      + (pk.dir===-1 ? (p2x-p1x-100)*(1-pk.progress) + (p1x+50) - (p1x+50) : 0);
+    // Simplified:
+    let drawX;
+    if(pk.dir===1) drawX = (p1x+50) + (p2x - p1x - 100) * pk.progress;
+    else drawX = (p2x-50) - (p2x - p1x - 100) * pk.progress;
+    ipcCtx.beginPath();
+    ipcCtx.arc(drawX, cy + pk.yOff, 6, 0, Math.PI*2);
+    ipcCtx.fill();
+    ipcCtx.fillStyle = '#fff';
+    ipcCtx.font = '10px "Share Tech Mono", monospace';
+    ipcCtx.textAlign = 'center';
+    ipcCtx.shadowBlur = 0;
+    ipcCtx.fillText(pk.label, drawX, cy + pk.yOff - 12);
+    ipcCtx.restore();
+  });
+
+  // Status area
+  ipcCtx.fillStyle = '#0a1628';
+  ipcCtx.fillRect(0, H-50, W, 50);
+  ipcCtx.strokeStyle = '#0d3460';
+  ipcCtx.lineWidth = 1;
+  ipcCtx.strokeRect(0, H-50, W, 50);
+  ipcCtx.fillStyle = '#00f5ff';
+  ipcCtx.font = '10px "Share Tech Mono", monospace';
+  ipcCtx.textAlign = 'left';
+  ipcCtx.fillText(`PKT enviados: ${sentCount}  |  PKT recibidos: ${recvCount}  |  Errores: ${errCount}`, 14, H-28);
+
+  ipcAnim = requestAnimationFrame(tickIPC);
+}
+
+let sentCount=0, recvCount=0, errCount=0;
+
+function tickIPC() {
+  packets.forEach(pk => {
+    pk.progress += pk.speed;
+    if(pk.progress >= 1) pk.alpha -= 0.05;
+  });
+  packets = packets.filter(p => p.alpha > 0);
+  renderIPC();
+}
+
+function sendMsg(type) {
+  if(!ipcInited) initIPC();
+  const configs = {
+    data:  { color:'#00f5ff', label:'DATA', log:'P1 → P2: Enviando paquete de datos...', logType:'send' },
+    ack:   { color:'#00ff88', label:'ACK',  log:'P2 → P1: Confirmación recibida (ACK)', logType:'recv', dir:-1 },
+    sync:  { color:'#ffd700', label:'SYNC', log:'P1 ↔ P2: Sincronización de estado', logType:'info' },
+    error: { color:'#ff2d6d', label:'ERR!', log:'⚠ Error de red: paquete perdido', logType:'err' }
+  };
+  const cfg = configs[type];
+  const dir = type==='ack' ? -1 : 1;
+  sentCount++;
+  if(type==='error') errCount++;
+  else setTimeout(()=>recvCount++, 1200);
+  packets.push({
+    progress:0, speed: type==='error' ? 0.02 : 0.015,
+    alpha:1, color:cfg.color, label:cfg.label,
+    dir: dir, yOff: (Math.random()-0.5)*20
+  });
+  if(type==='sync') packets.push({
+    progress:0.1, speed:0.015, alpha:1, color:cfg.color, label:'SYNC', dir:-1, yOff:(Math.random()-0.5)*20
+  });
+  addLog(cfg.log, cfg.logType);
+}
+
+// ── PUB-SUB CANVAS ───────────────────────────────────────
+let pubsubCanvas, psCtx, psAnim, psInited=false, psTick=0;
+function initPubSub() {
+  if(psInited) return;
+  psInited=true;
+  pubsubCanvas = document.getElementById('pubsubCanvas');
+  psCtx = pubsubCanvas.getContext('2d');
+  pubsubCanvas.width = pubsubCanvas.offsetWidth;
+  pubsubCanvas.height = 260;
+  drawPubSub();
+}
+function drawPubSub() {
+  const W=pubsubCanvas.width, H=pubsubCanvas.height, ctx=psCtx;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#020810'; ctx.fillRect(0,0,W,H);
+  psTick++;
+  const bx=W/2, by=H/2-10;
+  // Broker
+  ctx.fillStyle='rgba(13,52,96,0.6)';
+  ctx.strokeStyle='#ffd700';
+  ctx.lineWidth=2;
+  ctx.shadowColor='#ffd700'; ctx.shadowBlur=15;
+  ctx.beginPath(); ctx.roundRect(bx-55,by-28,110,56,4); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#ffd700'; ctx.font='bold 13px "Exo 2",sans-serif'; ctx.textAlign='center';
+  ctx.fillText('MESSAGE BROKER',bx,by);
+  ctx.fillStyle='#4a6080'; ctx.font='10px "Share Tech Mono",monospace'; ctx.fillText('(Apache Kafka)',bx,by+16);
+
+  // Publishers
+  const pubs=[{x:W*0.1,y:H*0.25,label:'PUB 1'},{x:W*0.1,y:H*0.75,label:'PUB 2'}];
+  // Subscribers
+  const subs=[{x:W*0.9,y:H*0.2,label:'SUB 1'},{x:W*0.9,y:H*0.5,label:'SUB 2'},{x:W*0.9,y:H*0.8,label:'SUB 3'}];
+
+  pubs.forEach((p,i) => {
+    ctx.fillStyle='rgba(10,22,40,0.9)'; ctx.strokeStyle='#00f5ff'; ctx.lineWidth=1.5;
+    ctx.shadowColor='#00f5ff'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.roundRect(p.x-30,p.y-18,60,36,3); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#00f5ff'; ctx.font='11px "Share Tech Mono",monospace'; ctx.textAlign='center';
+    ctx.fillText(p.label,p.x,p.y+4);
+    // Animated line to broker
+    const t=(psTick*0.03+i*0.5)%1;
+    ctx.strokeStyle='rgba(0,245,255,0.4)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(p.x+30,p.y); ctx.lineTo(bx-55,by); ctx.stroke();
+    ctx.setLineDash([]);
+    // Moving dot
+    const dx=bx-55-p.x-30, dy=by-p.y;
+    ctx.fillStyle='#00f5ff'; ctx.shadowColor='#00f5ff'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(p.x+30+dx*t, p.y+dy*t, 4, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+  });
+
+  subs.forEach((s,i) => {
+    ctx.fillStyle='rgba(10,22,40,0.9)'; ctx.strokeStyle='#00ff88'; ctx.lineWidth=1.5;
+    ctx.shadowColor='#00ff88'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.roundRect(s.x-30,s.y-18,60,36,3); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#00ff88'; ctx.font='11px "Share Tech Mono",monospace'; ctx.textAlign='center';
+    ctx.fillText(s.label,s.x,s.y+4);
+    const t=(psTick*0.025+i*0.33)%1;
+    ctx.strokeStyle='rgba(0,255,136,0.4)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(bx+55,by); ctx.lineTo(s.x-30,s.y); ctx.stroke();
+    ctx.setLineDash([]);
+    const dx=s.x-30-bx-55, dy=s.y-by;
+    ctx.fillStyle='#00ff88'; ctx.shadowColor='#00ff88'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(bx+55+dx*t, by+dy*t, 4, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+  });
+
+  requestAnimationFrame(drawPubSub);
+}
+
+// ── COMP CANVAS: Sínc vs Asínc ───────────────────────────
+let compCanvas, ccCtx, compTick=0, compRunning=false;
+function initComp() {
+  compCanvas = document.getElementById('compCanvas');
+  ccCtx = compCanvas.getContext('2d');
+  compCanvas.width = compCanvas.offsetWidth;
+  compCanvas.height = 200;
+  drawCompStatic();
+}
+function drawCompStatic() {
+  const W=compCanvas.width, H=compCanvas.height, ctx=ccCtx;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#020810'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#0d3460'; ctx.font='12px "Share Tech Mono",monospace'; ctx.textAlign='center';
+  ctx.fillText('Presiona ▶ INICIAR DEMO para ver la comparación en tiempo real',W/2,H/2);
+}
+let compState={syn:0, asyn:0, synBlocked:false, asynFree:true};
+function startCompDemo() {
+  compRunning=true; compTick=0;
+  compState={syn:0,asyn:0,synBlocked:false,asynFree:true};
+  animComp();
+}
+function resetCompDemo() {
+  compRunning=false; compTick=0; drawCompStatic();
+}
+function animComp() {
+  if(!compRunning) return;
+  compTick++;
+  const W=compCanvas.width, H=compCanvas.height, ctx=ccCtx;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#020810'; ctx.fillRect(0,0,W,H);
+
+  const halfH=H/2-10, pad=20, barW=W-2*pad;
+  const t=compTick/200;
+
+  // Labels
+  ctx.font='11px "Share Tech Mono",monospace'; ctx.textAlign='left';
+  ctx.fillStyle='#00f5ff'; ctx.fillText('SÍNCRONA (P1 bloqueado)',pad,22);
+  ctx.fillStyle='#ff6b35'; ctx.fillText('ASÍNCRONA (P1 libre)',pad,H/2+16);
+
+  // SYNC bar
+  const synPhase = Math.min(t,1);
+  // Send phase 0-0.2, block 0.2-0.7, recv 0.7-1.0
+  const phases=[
+    {start:0,end:0.2,color:'rgba(0,245,255,0.6)',label:'SEND'},
+    {start:0.2,end:0.7,color:'rgba(255,109,53,0.3)',label:'BLOQUEADO ⏸'},
+    {start:0.7,end:1.0,color:'rgba(0,255,136,0.5)',label:'RECV ✓'}
+  ];
+  phases.forEach(ph=>{
+    if(synPhase<ph.start) return;
+    const from=pad+barW*ph.start;
+    const to=pad+barW*Math.min(synPhase,ph.end);
+    ctx.fillStyle=ph.color;
+    ctx.fillRect(from,30,to-from,22);
+    if(to-from>50){
+      ctx.fillStyle='#fff'; ctx.font='10px "Share Tech Mono",monospace'; ctx.textAlign='center';
+      ctx.fillText(ph.label,(from+to)/2,45);
+    }
+  });
+  ctx.strokeStyle='rgba(0,245,255,0.3)'; ctx.lineWidth=1;
+  ctx.strokeRect(pad,30,barW,22);
+
+  // ASYNC bar
+  const asynPhase=Math.min(t,1);
+  const aphases=[
+    {start:0,end:0.15,color:'rgba(255,109,53,0.6)',label:'SEND'},
+    {start:0.15,end:0.85,color:'rgba(0,255,136,0.4)',label:'TRABAJA LIBREMENTE ▶▶'},
+    {start:0.85,end:1.0,color:'rgba(255,45,109,0.5)',label:'CALLBACK ✓'}
+  ];
+  aphases.forEach(ph=>{
+    if(asynPhase<ph.start) return;
+    const from=pad+barW*ph.start;
+    const to=pad+barW*Math.min(asynPhase,ph.end);
+    ctx.fillStyle=ph.color;
+    ctx.fillRect(from,H/2+24,to-from,22);
+    if(to-from>50){
+      ctx.fillStyle='#fff'; ctx.font='10px "Share Tech Mono",monospace'; ctx.textAlign='center';
+      ctx.fillText(ph.label,(from+to)/2,H/2+39);
+    }
+  });
+  ctx.strokeStyle='rgba(255,109,53,0.3)'; ctx.lineWidth=1;
+  ctx.strokeRect(pad,H/2+24,barW,22);
+
+  // Divider
+  ctx.strokeStyle='#0d3460'; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(pad,H/2+10); ctx.lineTo(W-pad,H/2+10); ctx.stroke();
+  ctx.setLineDash([]);
+
+  if(compTick<200) requestAnimationFrame(animComp);
+  else {
+    compRunning=false;
+    ctx.fillStyle='rgba(0,245,255,0.6)';
+    ctx.font='11px "Share Tech Mono",monospace'; ctx.textAlign='center';
+    ctx.fillText('▸ DEMO COMPLETO — Asíncrono usa ~70% más eficientemente el tiempo de P1', W/2, H-8);
+  }
+}
+
+// ── SYNC ANIMATION ───────────────────────────────────────
+function animateSyn() {
+  const pkt = document.getElementById('syn-pkt');
+  pkt.style.left='0%';
+  setTimeout(()=>{ pkt.style.left='50%'; },100);
+  setTimeout(()=>{ pkt.style.left='100%'; },700);
+  setTimeout(()=>{ pkt.style.left='50%'; },1300);
+  setTimeout(()=>{ pkt.style.left='0%'; },1900);
+}
+function animateAsyn() {
+  const pkt = document.getElementById('asyn-pkt');
+  pkt.style.left='0%';
+  setTimeout(()=>{ pkt.style.left='100%'; },100);
+}
+
+// ── CLOUD CANVAS ─────────────────────────────────────────
+let cloudCanvas, clCtx, clTick=0, clInited=false;
+function initCloud() {
+  if(clInited) return;
+  clInited=true;
+  cloudCanvas=document.getElementById('cloudCanvas');
+  clCtx=cloudCanvas.getContext('2d');
+  cloudCanvas.width=cloudCanvas.offsetWidth;
+  cloudCanvas.height=280;
+  drawCloud();
+}
+function drawCloud() {
+  const W=cloudCanvas.width, H=cloudCanvas.height, ctx=clCtx;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#020810'; ctx.fillRect(0,0,W,H);
+  clTick++;
+
+  const layers=[
+    {y:H*0.1, label:'APLICACIONES (SaaS)', color:'#ff2d6d', items:['Gmail','Zoom','Salesforce']},
+    {y:H*0.4, label:'PLATAFORMA (PaaS)', color:'#ffd700', items:['App Engine','Heroku','Beanstalk']},
+    {y:H*0.7, label:'INFRAESTRUCTURA (IaaS)', color:'#00ff88', items:['EC2','Azure VMs','Compute']},
+  ];
+
+  // HTTP/Web Middleware spine
+  ctx.strokeStyle='rgba(0,245,255,0.15)';
+  ctx.lineWidth=30;
+  const spx=W/2;
+  ctx.beginPath(); ctx.moveTo(spx,H*0.05); ctx.lineTo(spx,H*0.95); ctx.stroke();
+  ctx.fillStyle='rgba(0,245,255,0.5)';
+  ctx.font='10px "Share Tech Mono",monospace'; ctx.textAlign='center';
+  ctx.fillText('WEB / HTTP MIDDLEWARE',spx,H*0.5-5);
+  ctx.fillText('(Internet)',spx,H*0.5+12);
+
+  // Moving data packets on spine
+  for(let i=0;i<4;i++){
+    const t=((clTick*0.015+i*0.25)%1);
+    ctx.fillStyle='rgba(0,245,255,0.8)';
+    ctx.shadowColor='#00f5ff'; ctx.shadowBlur=6;
+    ctx.beginPath(); ctx.arc(spx+(Math.sin(i)*8), H*0.05+(H*0.9)*t,4,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+  }
+
+  layers.forEach((l,li)=>{
+    const items=l.items;
+    items.forEach((item,ii)=>{
+      const side = ii%2===0 ? -1 : 1;
+      const x= ii===0 ? W*0.12 : ii===1 ? W*0.88 : W*0.5;
+      const bx= side<0 ? x+60 : x-60;
+
+      ctx.fillStyle='rgba(10,22,40,0.9)';
+      ctx.strokeStyle=l.color; ctx.lineWidth=1.5;
+      ctx.shadowColor=l.color; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.roundRect(x-42,l.y-14,84,28,3); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.fillStyle=l.color; ctx.font='10px "Share Tech Mono",monospace'; ctx.textAlign='center';
+      ctx.fillText(item,x,l.y+4);
+
+      // Connection to spine
+      ctx.strokeStyle=l.color+'55'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(side<0?x+42:x-42, l.y); ctx.lineTo(spx,l.y); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Animated dot
+      const dt=((clTick*0.02+li*0.3+ii*0.15)%1);
+      const sx=side<0?x+42:x-42, ex=spx;
+      ctx.fillStyle=l.color; ctx.shadowColor=l.color; ctx.shadowBlur=6;
+      ctx.beginPath(); ctx.arc(sx+(ex-sx)*dt, l.y, 3,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0;
+    });
+
+    // Layer label
+    ctx.fillStyle=l.color+'99'; ctx.font='9px "Share Tech Mono",monospace'; ctx.textAlign='center';
+    ctx.fillText(l.label, spx, l.y+24);
+  });
+
+  requestAnimationFrame(drawCloud);
+}
+
+// ── INIT ─────────────────────────────────────────────────
+window.addEventListener('load', ()=>{
+  initLog();
+  addLog('Sistema IPC cargado. Selecciona una pestaña para explorar.','info');
+  // Resize canvases on window resize
+  window.addEventListener('resize',()=>{
+    if(ipcInited){ ipcCanvas.width=ipcCanvas.offsetWidth; }
+    if(psInited){ pubsubCanvas.width=pubsubCanvas.offsetWidth; }
+    if(clInited){ cloudCanvas.width=cloudCanvas.offsetWidth; }
+  });
+});
+</script>
+</body>
+</html>
